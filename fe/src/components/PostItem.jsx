@@ -191,7 +191,7 @@ const PostItem = ({ post, onDelete }) => {
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '16px' }}>
         <div style={{ display: 'flex' }}>
           <Link to={`/profile/${user.id}`}>
-            <Avatar src={profile.avatar_url || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} size={40} />
+            <Avatar src={profile.avatar_thumbnail_url || profile.avatar_url || "https://cdn-icons-png.flaticon.com/512/149/149071.png"} size={40} />
           </Link>
           <div style={{ marginLeft: '12px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>

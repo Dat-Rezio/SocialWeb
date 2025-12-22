@@ -46,6 +46,26 @@ async function fixProfileTable() {
       console.log('✅ Added avatar_public_id\n');
     }
 
+    if (!table.avatar_thumbnail_url) {
+      console.log('Adding avatar_thumbnail_url column...');
+      await QueryInterface.addColumn('profiles', 'avatar_thumbnail_url', {
+        type: DataTypes.STRING(255),
+        allowNull: true
+      });
+      missingColumns.push('avatar_thumbnail_url');
+      console.log('✅ Added avatar_thumbnail_url\n');
+    }
+
+    if (!table.avatar_thumbnail_public_id) {
+      console.log('Adding avatar_thumbnail_public_id column...');
+      await QueryInterface.addColumn('profiles', 'avatar_thumbnail_public_id', {
+        type: DataTypes.STRING(255),
+        allowNull: true
+      });
+      missingColumns.push('avatar_thumbnail_public_id');
+      console.log('✅ Added avatar_thumbnail_public_id\n');
+    }
+
     if (!table.cover_url) {
       console.log('Adding cover_url column...');
       await QueryInterface.addColumn('profiles', 'cover_url', {

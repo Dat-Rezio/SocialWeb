@@ -64,79 +64,193 @@ const updateAvatar = async (req, res) => {
     const userId = req.user.id;
     const { defaultModel } = req.body;
 
-    if (!req.file && !defaultModel) {
+    console.log('\n🔵 ========== AVATAR UPLOAD START ==========');
+    console.log('📥 User ID:', userId);
+    console.log('📥 req.files keys:', req.files ? Object.keys(req.files) : 'undefined');
+    console.log('📥 req.file:', req.file ? req.file.fieldname : 'undefined');
+    console.log('📥 defaultModel:', defaultModel);
+    
+    if (req.files) {
+      Object.entries(req.files).forEach(([key, files]) => {
+        console.log(`   - ${key}: ${files.map(f => f.filename).join(', ')}`);
+      });
+    }
+
+    if (!req.files && !req.file && !defaultModel) {
+      console.log('❌ No files provided');
       return res.status(400).json({ message: 'Không có dữ liệu avatar' });
     }
 
-    let avatarUrl;
-    let publicId = null;
+    let avatarUrl, thumbnailUrl;
+    let avatarPublicId = null, thumbnailPublicId = null;
     let avatarType = 'image';
 
     // 1️⃣ Nếu dùng Model mặc định
     if (defaultModel) {
       avatarUrl = `${process.env.CDN_URL}/default-models/${defaultModel}.glb`;
       avatarType = 'model3d';
+      console.log('✅ Using default model');
     } 
-    // 2️⃣ Nếu Upload file (Ảnh hoặc 3D)
+    // 2️⃣ Nếu Upload 2 files: thumbnail + model (req.files từ upload.fields)
+    else if (req.files && (req.files.thumbnail || req.files.model)) {
+      const thumbnailFile = req.files.thumbnail?.[0];
+      const modelFile = req.files.model?.[0];
+
+      console.log('📦 Processing files - thumbnail:', thumbnailFile?.filename, 'model:', modelFile?.filename);
+
+      // Upload cả thumbnail + 3D model
+      if (thumbnailFile && modelFile) {
+        console.log('⬆️ Uploading thumbnail and model...');
+        
+        // Upload thumbnail
+        const thumbnailResult = await cloudinary.uploader.upload(thumbnailFile.path, {
+          folder: 'social_app/avatar_thumbnail',
+          resource_type: 'image'
+        });
+        thumbnailUrl = thumbnailResult.secure_url;
+        thumbnailPublicId = thumbnailResult.public_id;
+        console.log('✅ Thumbnail uploaded:', thumbnailUrl);
+
+        // Upload 3D model
+        const modelResult = await cloudinary.uploader.upload(modelFile.path, {
+          folder: 'social_app/avatar_3d',
+          resource_type: 'raw'
+        });
+        avatarUrl = modelResult.secure_url;
+        avatarPublicId = modelResult.public_id;
+        avatarType = 'model3d';
+        console.log('✅ Model uploaded:', avatarUrl);
+
+        // Xóa file tạm
+        try { fs.unlinkSync(thumbnailFile.path); } catch (_) {}
+        try { fs.unlinkSync(modelFile.path); } catch (_) {}
+      }
+      // Upload chỉ ảnh (fallback nếu thiếu model)
+      else if (thumbnailFile) {
+        console.log('⬆️ Uploading thumbnail only...');
+        const thumbnailResult = await cloudinary.uploader.upload(thumbnailFile.path, {
+          folder: 'social_app/avatar',
+          resource_type: 'image'
+        });
+        avatarUrl = thumbnailResult.secure_url;
+        avatarPublicId = thumbnailResult.public_id;
+        avatarType = 'image';
+        console.log('✅ Avatar uploaded:', avatarUrl);
+        try { fs.unlinkSync(thumbnailFile.path); } catch (_) {}
+      }
+      // Upload chỉ model (fallback nếu thiếu thumbnail)
+      else if (modelFile) {
+        console.log('⬆️ Uploading model only...');
+        const modelResult = await cloudinary.uploader.upload(modelFile.path, {
+          folder: 'social_app/avatar_3d',
+          resource_type: 'raw'
+        });
+        avatarUrl = modelResult.secure_url;
+        avatarPublicId = modelResult.public_id;
+        avatarType = 'model3d';
+        console.log('✅ Model uploaded:', avatarUrl);
+        try { fs.unlinkSync(modelFile.path); } catch (_) {}
+      }
+      else {
+        return res.status(400).json({ message: 'Không có file được upload' });
+      }
+    }
+    // 3️⃣ Fallback: Upload chỉ một file (ảnh hoặc 3D) - legacy support
     else if (req.file) {
-      // Xác định loại file dựa trên middleware multer đã xử lý trước đó
+      console.log('⬆️ Legacy upload - req.file:', req.file.filename);
+      
       avatarType = req.file._is3D ? 'model3d' : 'image';
       const resourceType = avatarType === 'model3d' ? 'raw' : 'image';
       const folderPath = avatarType === 'model3d' ? 'social_app/avatar_3d' : 'social_app/avatar';
 
-      // UPLOAD LÊN CLOUDINARY
       const result = await cloudinary.uploader.upload(req.file.path, {
         folder: folderPath,
-        resource_type: resourceType,
-        // Đảm bảo không truyền thừa tham số nào khác vào đây nếu không cần thiết
+        resource_type: resourceType
       });
 
       avatarUrl = result.secure_url;
-      publicId = result.public_id;
+      avatarPublicId = result.public_id;
+      console.log('✅ File uploaded (legacy):', avatarUrl);
 
-      // Xóa file tạm sau khi upload thành công
       try { fs.unlinkSync(req.file.path); } catch (_) {}
     }
+    else {
+      return res.status(400).json({ message: 'Không có file được upload' });
+    }
 
-    // 3️⃣ Cập nhật Database
+    // 4️⃣ Cập nhật Database
+    console.log('💾 Updating database...');
     const profile = await Profile.findOne({ where: { user_id: userId } });
 
-    // Xoá file cũ trên Cloudinary để tiết kiệm bộ nhớ
+    // Xoá file cũ trên Cloudinary
     if (profile?.avatar_public_id) {
+      console.log('🗑️ Deleting old avatar...');
       await cloudinary.uploader.destroy(profile.avatar_public_id, {
-        // QUAN TRỌNG: Phải đúng resource_type cũ mới xóa được
         resource_type: profile.avatar_type === 'model3d' ? 'raw' : 'image'
-      }).catch(err => console.error("Xóa file cũ lỗi:", err.message));
+      }).catch(err => console.error("❌ Xóa avatar cũ lỗi:", err.message));
+    }
+
+    if (profile?.avatar_thumbnail_public_id) {
+      console.log('🗑️ Deleting old thumbnail...');
+      await cloudinary.uploader.destroy(profile.avatar_thumbnail_public_id, {
+        resource_type: 'image'
+      }).catch(err => console.error("❌ Xóa thumbnail cũ lỗi:", err.message));
     }
 
     // Lưu vào DB
-    await Profile.upsert({
+    const updateData = {
       user_id: userId,
       avatar_url: avatarUrl,
-      avatar_public_id: publicId,
+      avatar_public_id: avatarPublicId,
       avatar_type: avatarType,
       updated_at: new Date()
-    });
+    };
+
+    // Always clear/set thumbnail fields
+    if (thumbnailUrl !== undefined) {
+      updateData.avatar_thumbnail_url = thumbnailUrl || null;
+      updateData.avatar_thumbnail_public_id = thumbnailPublicId || null;
+    } else {
+      // If no thumbnail uploaded, clear old thumbnail
+      updateData.avatar_thumbnail_url = null;
+      updateData.avatar_thumbnail_public_id = null;
+    }
+
+    await Profile.upsert(updateData);
+    console.log('✅ Database updated');
+    console.log('🔵 ========== AVATAR UPLOAD SUCCESS ==========\n');
 
     res.json({
       message: 'Cập nhật avatar thành công',
-      avatar_url: avatarUrl,
-      avatar_type: avatarType
+      profile: {
+        avatar_url: avatarUrl,
+        avatar_thumbnail_url: thumbnailUrl || null,
+        avatar_type: avatarType
+      }
     });
 
   } catch (err) {
-    // Nếu lỗi, vẫn nên xóa file tạm để tránh rác server
+    console.error('\n🔴 ========== AVATAR UPLOAD ERROR ==========');
+    console.error('❌ Message:', err.message);
+    console.error('❌ Stack:', err.stack);
+    console.error('🔴 ==========================================\n');
+
+    // Xóa file tạm nếu lỗi
+    if (req.files) {
+      Object.values(req.files).forEach(files => {
+        files.forEach(file => {
+          try { fs.unlinkSync(file.path); } catch (_) {}
+        });
+      });
+    }
     if (req.file) try { fs.unlinkSync(req.file.path); } catch (_) {}
     
-    console.error('UPDATE AVATAR ERROR:', err);
     res.status(500).json({
       message: 'Cập nhật avatar thất bại',
       error: err.message
     });
   }
 };
-
-
 
 const updateCover = async (req, res) => {
   try {

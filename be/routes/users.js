@@ -8,7 +8,12 @@ router.get('/me', auth, getMyProfile);
 router.get('/search', auth, searchUsers);
 router.get('/:userId', auth, getProfileById);
 router.put('/me', auth, updateProfile);
-router.post('/avatar', auth, upload.single('image'), checkFileSize, updateAvatar);
+// Support both single file (legacy) and multiple files (thumbnail + model)
+router.post('/avatar', auth, upload.fields([
+  { name: 'thumbnail', maxCount: 1 },
+  { name: 'model', maxCount: 1 },
+  { name: 'image', maxCount: 1 } // Legacy support
+]), checkFileSize, updateAvatar);
 router.post('/cover', auth, upload.single('image'), checkFileSize, updateCover);
 
 module.exports = router;

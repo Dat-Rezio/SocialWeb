@@ -12,6 +12,8 @@ class Profile extends Model {
           defaultValue: 'image'
       },
       avatar_public_id: { type: DataTypes.STRING(255) },
+      avatar_thumbnail_url: { type: DataTypes.STRING(255) },
+      avatar_thumbnail_public_id: { type: DataTypes.STRING(255) },
       cover_url: { type: DataTypes.STRING(255) },
       cover_public_id: { type: DataTypes.STRING(255) },
       birthday: { type: DataTypes.DATEONLY },

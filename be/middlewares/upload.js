@@ -38,14 +38,29 @@ const upload = multer({ storage, fileFilter });
 
 // Middleware kiểm tra size riêng ảnh/video
 const checkFileSize = (req, res, next) => {
-  const files = req.files || [];
-  for (const file of files) {
+  // Handle both req.files (from .fields()) and req.file (from .single())
+  const allFiles = [];
+  
+  if (req.file) {
+    // Single file upload
+    allFiles.push(req.file);
+  } else if (req.files) {
+    // Multiple fields upload - req.files is an object with field names as keys
+    // Each value is an array of files
+    Object.values(req.files).forEach(fileArray => {
+      if (Array.isArray(fileArray)) {
+        allFiles.push(...fileArray);
+      }
+    });
+  }
+
+  for (const file of allFiles) {
     if (file._isImage && file.size > 10 * 1024 * 1024)
       return res.status(400).json({ message: `Ảnh ${file.originalname} quá lớn (max 10MB)` });
     if (file._isVideo && file.size > 50 * 1024 * 1024)
       return res.status(400).json({ message: `Video ${file.originalname} quá lớn (max 50MB)` });
     if (file._is3D && file.size > 10 * 1024 * 1024)
-      return res.status(400).json({message: `Model 3D ${file.originalname} quá lớn (max 10MB)`});
+      return res.status(400).json({ message: `Model 3D ${file.originalname} quá lớn (max 10MB)` });
   }
   next();
 };

@@ -14,6 +14,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import axiosClient from '../api/axiosClient';
 import { useAuth } from '../context/AuthContext';
 import PostItem from '../components/PostItem';
+import Model3DViewer from '../components/Model3DViewer';
 import dayjs from 'dayjs';
 
 const { Title, Text, Paragraph } = Typography;
@@ -21,7 +22,7 @@ const { Title, Text, Paragraph } = Typography;
 const Profile = () => {
   const { userId } = useParams();
   const navigate = useNavigate();
-  const { user: currentUser, setUser } = useAuth();
+  const { user: currentUser } = useAuth();
   const [profileUser, setProfileUser] = useState(null);
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -31,6 +32,16 @@ const Profile = () => {
   const [isEditModalVisible, setIsEditModalVisible] = useState(false);
   const [form] = Form.useForm();
   const [uploading, setUploading] = useState(false);
+  const [is3DViewerVisible, setIs3DViewerVisible] = useState(false);
+  const [isAvatarModalVisible, setIsAvatarModalVisible] = useState(false);
+  const [selectedFiles, setSelectedFiles] = useState({ thumbnail: null, model: null });
+
+  // Helper function to detect if URL is a 3D model
+  const is3DModel = (url) => {
+    if (!url) return false;
+    const extension = url.toLowerCase().split('.').pop();
+    return ['glb', 'gltf'].includes(extension);
+  };
 
   // Determine which user ID to fetch
   const targetUserId = userId || currentUser?.id;
@@ -129,30 +140,71 @@ const Profile = () => {
       return;
     }
     if (info.file.status === 'done') {
-      // Get this url from response in real world.
       setUploading(false);
     }
   };
 
-  const customRequest = async ({ file, onSuccess, onError }) => {
-    const formData = new FormData();
-    formData.append('image', file);
+  const handleUploadAvatar = async () => {
+    if (!selectedFiles.thumbnail) {
+      message.error('Please select a thumbnail image');
+      return;
+    }
+
+    setUploading(true);
     try {
+      const formData = new FormData();
+      formData.append('thumbnail', selectedFiles.thumbnail);
+      
+      // Model is optional
+      if (selectedFiles.model) {
+        formData.append('model', selectedFiles.model);
+      }
+      
       const res = await axiosClient.post('/users/avatar', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
-      setProfileUser({ ...profileUser, avatar_url: res.profile.avatar_url });
-      // Update global user context
-      if (currentUser) {
-          const updatedUser = { ...currentUser, avatar_url: res.profile.avatar_url };
-          setUser(updatedUser);
-          localStorage.setItem('user', JSON.stringify(updatedUser));
-      }
-      onSuccess(res.body);
+
+      // Update local profile
+      setProfileUser({ 
+        ...profileUser, 
+        avatar_url: res.profile.avatar_url, 
+        avatar_thumbnail_url: res.profile.avatar_thumbnail_url 
+      });
+
+      setIsAvatarModalVisible(false);
+      setSelectedFiles({ thumbnail: null, model: null });
       message.success('Avatar updated successfully');
     } catch (err) {
-      onError(err);
+      console.error('Upload error:', err);
       message.error('Failed to upload avatar');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleThumbnailUpload = (info) => {
+    console.log('📸 Thumbnail upload info:', info);
+    if (info.fileList && info.fileList.length > 0) {
+      const file = info.fileList[0];
+      console.log('📸 Selected thumbnail:', file.name);
+      setSelectedFiles(prev => {
+        const updated = { ...prev, thumbnail: file.originFileObj || file };
+        console.log('📸 Updated state:', updated);
+        return updated;
+      });
+    }
+  };
+
+  const handleModelUpload = (info) => {
+    console.log('📦 Model upload info:', info);
+    if (info.fileList && info.fileList.length > 0) {
+      const file = info.fileList[0];
+      console.log('📦 Selected model:', file.name);
+      setSelectedFiles(prev => {
+        const updated = { ...prev, model: file.originFileObj || file };
+        console.log('📦 Updated state:', updated);
+        return updated;
+      });
     }
   };
 
@@ -239,22 +291,22 @@ const Profile = () => {
               <div style={{ position: 'relative' }}>
                 <Avatar 
                     size={120} 
-                    src={profileUser.avatar_url} 
-                    style={{ border: '4px solid white', boxShadow: '0 2px 8px rgba(0,0,0,0.1)' }}
+                    src={profileUser.avatar_thumbnail_url || profileUser.avatar_url}
+                    onClick={() => is3DModel(profileUser.avatar_url) && setIs3DViewerVisible(true)}
+                    style={{ 
+                        border: '4px solid white', 
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                        cursor: is3DModel(profileUser.avatar_url) ? 'pointer' : 'default'
+                    }}
                 />
                 {isOwnProfile && (
-                    <Upload 
-                        customRequest={customRequest} 
-                        showUploadList={false} 
-                        onChange={handleAvatarChange}
-                    >
-                        <Button 
-                            shape="circle" 
-                            icon={<EditOutlined />} 
-                            size="small" 
-                            style={{ position: 'absolute', bottom: '10px', right: '10px', border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }} 
-                        />
-                    </Upload>
+                    <Button 
+                        shape="circle" 
+                        icon={<EditOutlined />} 
+                        size="small" 
+                        onClick={() => setIsAvatarModalVisible(true)}
+                        style={{ position: 'absolute', bottom: '10px', right: '10px', border: 'none', boxShadow: '0 2px 4px rgba(0,0,0,0.2)' }} 
+                    />
                 )}
               </div>
               <div style={{ marginLeft: '20px', marginBottom: '10px' }}>
@@ -325,6 +377,77 @@ const Profile = () => {
           </Form.Item>
         </Form>
       </Modal>
+
+      {/* Avatar Upload Modal - Solution 1: Thumbnail + 3D Model */}
+      <Modal
+        title="Change Avatar"
+        open={isAvatarModalVisible}
+        onCancel={() => {
+          setIsAvatarModalVisible(false);
+          setSelectedFiles({ thumbnail: null, model: null });
+        }}
+        footer={[
+          <Button key="cancel" onClick={() => {
+            setIsAvatarModalVisible(false);
+            setSelectedFiles({ thumbnail: null, model: null });
+          }}>Cancel</Button>,
+          <Button key="submit" type="primary" loading={uploading} onClick={handleUploadAvatar}>
+            Upload
+          </Button>,
+        ]}
+      >
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div>
+            <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>Thumbnail Image</div>
+            <p style={{ fontSize: '12px', color: '#666', marginBottom: '10px' }}>
+              Upload a 2D image that will be displayed as your avatar
+            </p>
+            <Upload
+              maxCount={1}
+              accept="image/*"
+              onChange={handleThumbnailUpload}
+              beforeUpload={() => false}
+            >
+              <Button>{selectedFiles.thumbnail ? '✓ ' + selectedFiles.thumbnail.name : 'Select Thumbnail Image'}</Button>
+            </Upload>
+          </div>
+
+          <div style={{ borderTop: '1px solid #f0f0f0', paddingTop: '20px' }}>
+            <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>3D Model File <span style={{ fontSize: '11px', color: '#999', fontWeight: 'normal' }}>(Optional)</span></div>
+            <p style={{ fontSize: '12px', color: '#666', marginBottom: '10px' }}>
+              Upload a 3D model (.glb or .gltf) - click on avatar to view
+            </p>
+            <Upload
+              maxCount={1}
+              accept=".glb,.gltf"
+              onChange={handleModelUpload}
+              beforeUpload={() => false}
+            >
+              <Button>{selectedFiles.model ? '✓ ' + selectedFiles.model.name : 'Select 3D Model (Optional)'}</Button>
+            </Upload>
+          </div>
+
+          {selectedFiles.thumbnail && (
+            <div style={{ 
+              background: '#f6ffed', 
+              border: '1px solid #b7eb8f',
+              borderRadius: '4px',
+              padding: '10px',
+              color: '#52c41a'
+            }}>
+              ✓ Ready to upload! {selectedFiles.model ? 'Your thumbnail will display as avatar, and the 3D model will be viewable by clicking on it.' : 'Your thumbnail will display as avatar.'}
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* 3D Model Viewer */}
+      <Model3DViewer 
+        visible={is3DViewerVisible}
+        onCancel={() => setIs3DViewerVisible(false)}
+        modelUrl={profileUser?.avatar_url}
+        modelName={profileUser?.fullname || profileUser?.username || 'Avatar'}
+      />
     </div>
   );
 };
