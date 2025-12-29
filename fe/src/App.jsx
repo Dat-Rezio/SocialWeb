@@ -11,6 +11,7 @@ import Messages from './pages/Messages';
 import Notifications from './pages/Notifications';
 import CreatePost from './pages/CreatePost';
 import Profile from './pages/Profile';
+import Admin from './pages/Admin';
 import MainLayout from './components/MainLayout';
 import { useAuth } from './context/AuthContext';
 
@@ -92,6 +93,14 @@ function App() {
           element={
             <PrivateRoute>
               <Profile />
+            </PrivateRoute>
+          } 
+        />
+        <Route 
+          path="/admin" 
+          element={
+            <PrivateRoute>
+              <Admin />
             </PrivateRoute>
           } 
         />

@@ -8,7 +8,8 @@ import {
   UserOutlined, 
   PlusCircleOutlined,
   LogoutOutlined,
-  BellOutlined
+  BellOutlined,
+  SafetyOutlined
 } from '@ant-design/icons';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { io } from 'socket.io-client';
@@ -69,6 +70,7 @@ const MainLayout = ({ children }) => {
     { key: '/discover', icon: <SearchOutlined />, label: 'Discover' },
     { key: '/notifications', icon: <Badge count={unreadCount} size="small" offset={[5, 0]}><BellOutlined /></Badge>, label: 'Notifications' },
     { key: '/profile', icon: <UserOutlined />, label: 'Profile' },
+    ...(user?.role === 'admin' ? [{ key: '/admin', icon: <SafetyOutlined />, label: 'Admin Panel' }] : []),
   ];
 
   const handleMenuClick = (e) => {

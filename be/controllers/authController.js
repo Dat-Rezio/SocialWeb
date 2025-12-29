@@ -5,11 +5,22 @@ require('dotenv').config();
 const { User, Profile } = require('../models');
 const { Op } = require('sequelize');
 
+// Helper function to validate PTIT email
+const isValidPTITEmail = (email) => {
+  return email && email.endsWith('@stu.ptit.edu.vn');
+};
+
 const register = async (req, res) => {
   try {
     console.log('📝 REGISTER ATTEMPT:', req.body.username);
     const { username, password, email, fullname } = req.body;
     if (!username || !password || !email) return res.status(400).json({ message: 'Thiếu thông tin' });
+
+    // Validate PTIT email domain
+    if (!isValidPTITEmail(email)) {
+      console.log('❌ Invalid email domain:', email);
+      return res.status(400).json({ message: 'Email phải sử dụng domain PTIT (@stu.ptit.edu.vn)' });
+    }
 
     const exists = await User.findOne({ where: { [Op.or]: [{ username }, { email }] } });
     if (exists) {
@@ -18,14 +29,20 @@ const register = async (req, res) => {
     }
 
     const hash = await bcrypt.hash(password, 10);
-    const user = await User.create({ username, password: hash, email });
+    // Default role is 'user' for new registrations
+    const user = await User.create({ 
+      username, 
+      password: hash, 
+      email,
+      role: 'user'
+    });
 
     if (username) {
       await Profile.create({ user_id: user.id, fullname, avatar_url: 'social_network/publicAsset/default_avatar.png' });
     }
 
-    console.log('✅ REGISTER SUCCESS:', username);
-    res.json({user: { id: user.id, username: user.username, email: user.email } });
+    console.log('✅ REGISTER SUCCESS:', username, '| Role: user');
+    res.json({user: { id: user.id, username: user.username, email: user.email, role: user.role } });
   } catch (err) {
     console.error('❌ REGISTER ERROR:', err);
     res.status(500).json({ message: 'Server error', error: err.message });
@@ -47,7 +64,7 @@ const login = async (req, res) => {
       return res.status(401).json({ message: 'Sai thông tin đăng nhập' });
     }
 
-    console.log('✅ User found:', user.username);
+    console.log('✅ User found:', user.username, '| Role:', user.role);
 
     const ok = await bcrypt.compare(password, user.password);
     if (!ok) {
@@ -57,13 +74,14 @@ const login = async (req, res) => {
 
     console.log('✅ Password correct');
 
-    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
+    const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: process.env.JWT_EXPIRES_IN || '7d' });
     
     // Return user without password
     const userResponse = {
       id: user.id,
       username: user.username,
       email: user.email,
+      role: user.role,
       Profile: user.Profile
     };
     
@@ -110,4 +128,4 @@ const changePassword = async (req, res) => {
   }
 };
 
-module.exports = { register, login, changePassword, getMe };
+module.exports = { register, login, changePassword, getMe, isValidPTITEmail };

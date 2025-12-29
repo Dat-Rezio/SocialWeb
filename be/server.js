@@ -20,6 +20,7 @@ const notificationRoutes = require('./routes/notifications');
 const chatRoutes = require('./routes/chat');
 const aiRoutes = require('./routes/ai');
 const storyRoutes = require('./routes/stories');
+const adminRoutes = require('./routes/admin');
 
 
 const app = express();
@@ -44,6 +45,7 @@ app.use('/api/comments', commentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/stories', storyRoutes);
+app.use('/api/admin', adminRoutes);
 
 app.get('/', (req, res) => res.send('Social API running'));
 console.log("Cloudinary:", process.env.CLOUDINARY_CLOUD_NAME);

@@ -7,6 +7,11 @@ class User extends Model {
       username: { type: DataTypes.STRING(50), unique: true, allowNull: false },
       password: { type: DataTypes.STRING(255), allowNull: false },
       email: { type: DataTypes.STRING(100), unique: true, allowNull: false },
+      role: { 
+        type: DataTypes.ENUM('user', 'admin'), 
+        defaultValue: 'user',
+        allowNull: false 
+      },
       created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
       status: { type: DataTypes.ENUM('active','banned'), defaultValue: 'active' }
     }, {
